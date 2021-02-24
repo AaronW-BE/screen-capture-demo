@@ -54,7 +54,7 @@ public class ScreenCaptureService extends Service {
 
         String mImageName = System.currentTimeMillis() + ".png";
         ImageReader mImageReader = ImageReader.newInstance(
-                metrics.widthPixels, metrics.heightPixels, ImageFormat.RGB_565, 2
+                metrics.widthPixels, metrics.heightPixels, ImageFormat.RGB_565, 1
         );
 
         VirtualDisplay virtualDisplay = mediaProjection.createVirtualDisplay(
