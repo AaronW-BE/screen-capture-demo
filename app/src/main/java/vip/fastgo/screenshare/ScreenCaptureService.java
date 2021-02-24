@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.media.Image;
@@ -21,6 +22,7 @@ import android.os.IBinder;
 import android.provider.MediaStore;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.widget.Toast;
 
 import java.nio.ByteBuffer;
 
@@ -52,7 +54,7 @@ public class ScreenCaptureService extends Service {
 
         String mImageName = System.currentTimeMillis() + ".png";
         ImageReader mImageReader = ImageReader.newInstance(
-                metrics.widthPixels, metrics.heightPixels, ImageFormat.DEPTH_JPEG, 2
+                metrics.widthPixels, metrics.heightPixels, ImageFormat.RGB_565, 2
         );
 
         VirtualDisplay virtualDisplay = mediaProjection.createVirtualDisplay(
@@ -63,27 +65,36 @@ public class ScreenCaptureService extends Service {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 mImageReader.getSurface(), null, null
         );
+        mImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+            @Override
+            public void onImageAvailable(ImageReader reader) {
+                try {
+                    Image image = reader.acquireLatestImage();
+                    Toast.makeText(ScreenCaptureService.this, "get image ok", Toast.LENGTH_SHORT).show();
+                    int width = image.getWidth();
+                    int height = image.getHeight();
+                    final Image.Plane[] planes = image.getPlanes();
+                    final ByteBuffer buffer = planes[0].getBuffer();
+                    int pixelStride = planes[0].getPixelStride();
+                    int rowStride = planes[0].getRowStride();
+                    int rowPadding = rowStride - pixelStride * width;
+                    Bitmap bitmap = Bitmap.createBitmap(width+rowPadding/pixelStride, height, Bitmap.Config.RGB_565);
+                    bitmap.copyPixelsFromBuffer(buffer);
+                    image.close();
+                    if (bitmap != null) {
+                        // 保存或者显示...
+                        saveBitmap(bitmap, mImageName);
+                        virtualDisplay.release();
+                        mediaProjection.stop();
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
 
-        Image image = mImageReader.acquireLatestImage();
-        if (image == null) {
-            Log.e("ScreenCaptureService", "image is null.");
-        } else {
-            int width = image.getWidth();
-            int height = image.getHeight();
-            final Image.Plane[] planes = image.getPlanes();
-            final ByteBuffer buffer = planes[0].getBuffer();
-            int pixelStride = planes[0].getPixelStride();
-            int rowStride = planes[0].getRowStride();
-            int rowPadding = rowStride - pixelStride * width;
-            Bitmap mBitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
-            mBitmap.copyPixelsFromBuffer(buffer);
-            mBitmap = Bitmap.createBitmap(mBitmap, 0, 0, width, height);
-            image.close();
-            if (mBitmap != null) {
-                // 保存或者显示...
-                saveBitmap(mBitmap, mImageName);
             }
-        }
+        }, null);
+
+
 
         return super.onStartCommand(intent, flags, startId);
     }
@@ -99,7 +110,7 @@ public class ScreenCaptureService extends Service {
 
         builder.setContentIntent(PendingIntent.getActivity(this, 0, nfIntent, 0)) // 设置PendingIntent
                 .setLargeIcon(BitmapFactory.decodeResource(this.getResources(), R.mipmap.ic_launcher)) // 设置下拉列表中的图标(大图标)
-                //.setContentTitle("SMI InstantView") // 设置下拉列表里的标题
+                .setContentTitle("ScreenCaptureService") // 设置下拉列表里的标题
                 .setSmallIcon(R.mipmap.ic_launcher) // 设置状态栏内的小图标
                 .setContentText("ScreenCaptureService is running......") // 设置上下文内容
                 .setWhen(System.currentTimeMillis()); // 设置该通知发生的时间
